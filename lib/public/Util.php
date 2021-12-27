@@ -48,6 +48,7 @@ namespace OCP;
 
 
 use OC\AppScriptDependency;
+use OC\AppScriptSort;
 
 /**
  * This class provides different helper functions to make the life of a developer easier
@@ -217,68 +218,15 @@ class Util {
 	}
 
 	/**
-	 * Recursive topological sorting
-	 *
-	 * @param AppScriptDependency $app
-	 * @param array|null $parents
-	 * @since 24.0.0
-	 */
-	private static function topSortVisit(AppScriptDependency $app, array &$parents = null): void {
-		// Detect and log circular dependencies
-		if (isset($parents[$app->getId()])) {
-			self::writeLog('core', 'Circular dependency in app scripts at app ' . $app->getId(), \OCP\ILogger::ERROR);
-		}
-
-		// If app has not been visited
-		if (!$app->isVisited()) {
-			$parents[$app->getId()] = true;
-			$app->setVisited(true);
-
-			foreach ($app->getDeps() as $dep) {
-				if ($app->getId() === $dep) {
-					// Ignore dependency on itself
-					continue;
-				}
-
-				if (isset(self::$scriptDeps[$dep])) {
-					$newParents = $parents;
-					self::topSortVisit(self::$scriptDeps[$dep], $newParents);
-				}
-			}
-
-			self::$sortedScriptDeps[] = $app->getId();
-		}
-	}
-
-	/**
 	 * Return the list of scripts injected to the page
 	 *
 	 * @return array
 	 * @since 24.0.0
 	 */
 	public static function getScripts(): array {
-		// Sort scripts topologically by their dependencies
-		// Implementation based on https://github.com/marcj/topsort.php
-
-		// Reset if scriptDeps had been sorted into sortedScriptDeps before
-		if (!empty(self::$sortedScriptDeps)) {
-			self::$sortedScriptDeps = [];
-			foreach (self::$scriptDeps as $app) {
-				$app->setVisited(false);
-			}
-		}
-
 		// Sort scriptDeps into sortedScriptDeps
-		foreach (self::$scriptDeps as $app) {
-			$parents = [];
-			self::topSortVisit($app, $parents);
-		}
-
-		// Sort scripts into sortedScripts based on sortedScriptDeps order
-		$sortedScripts = [];
-		foreach (self::$sortedScriptDeps as $app) {
-			$sortedScripts[$app] = self::$scripts[$app] ?? [];
-		}
+		$scriptSort = new AppScriptSort(self::$scripts, self::$scriptDeps);
+		$sortedScripts = $scriptSort->sort();
 
 		// Flatten array and remove duplicates
 		return $sortedScripts ? array_unique(array_merge(...array_values(($sortedScripts)))) : [];
