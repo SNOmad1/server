@@ -46,6 +46,9 @@
 
 namespace OCP;
 
+
+use OC\AppScriptDependency;
+
 /**
  * This class provides different helper functions to make the life of a developer easier
  *
@@ -205,13 +208,9 @@ class Util {
 
 		// store app in dependency list
 		if (!array_key_exists($application, self::$scriptDeps)) {
-			self::$scriptDeps[$application] = (object)[
-				'id' => $application,
-				'deps' => [$afterAppId],
-				'visited' => false,
-			];
-		} elseif (!in_array($afterAppId, self::$scriptDeps[$application]->deps, true)) {
-			self::$scriptDeps[$application]->deps[] = $afterAppId;
+			self::$scriptDeps[$application] = new AppScriptDependency($application, [$afterAppId]);
+		} else {
+			self::$scriptDeps[$application]->addDep($afterAppId);
 		}
 
 		self::$scripts[$application][] = $path;
@@ -220,23 +219,23 @@ class Util {
 	/**
 	 * Recursive topological sorting
 	 *
-	 * @param object $app
+	 * @param AppScriptDependency $app
 	 * @param array|null $parents
 	 * @since 24.0.0
 	 */
-	private static function topSortVisit(object $app, array &$parents = null): void {
+	private static function topSortVisit(AppScriptDependency $app, array &$parents = null): void {
 		// Detect and log circular dependencies
-		if (isset($parents[$app->id])) {
-			self::writeLog('core', 'Circular dependency in app scripts at app ' . $app->id, \OCP\ILogger::ERROR);
+		if (isset($parents[$app->getId()])) {
+			self::writeLog('core', 'Circular dependency in app scripts at app ' . $app->getId(), \OCP\ILogger::ERROR);
 		}
 
 		// If app has not been visited
-		if (!$app->visited) {
-			$parents[$app->id] = true;
-			$app->visited = true;
+		if (!$app->isVisited()) {
+			$parents[$app->getId()] = true;
+			$app->setVisited(true);
 
-			foreach ($app->deps as $dep) {
-				if ($app->id === $dep) {
+			foreach ($app->getDeps() as $dep) {
+				if ($app->getId() === $dep) {
 					// Ignore dependency on itself
 					continue;
 				}
@@ -247,7 +246,7 @@ class Util {
 				}
 			}
 
-			self::$sortedScriptDeps[] = $app->id;
+			self::$sortedScriptDeps[] = $app->getId();
 		}
 	}
 
@@ -265,7 +264,7 @@ class Util {
 		if (!empty(self::$sortedScriptDeps)) {
 			self::$sortedScriptDeps = [];
 			foreach (self::$scriptDeps as $app) {
-				$app->visited = false;
+				$app->setVisited(false);
 			}
 		}
 
